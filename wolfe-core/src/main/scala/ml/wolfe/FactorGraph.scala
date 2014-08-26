@@ -76,14 +76,33 @@ final class FactorGraph {
   var expectations: FactorieVector = null
 
   /**
-   * Adds a node for a variable of domain size `dim`
+   * Adds a discrete node for a variable of domain size `dim`
    * @param dim size of domain of corresponding variable
    * @param label description of what the variable represents
    * @param domainLabels description of each element in the domain
    * @return the added node.
    */
-  def addNode(dim: Int, label:String = "", domainLabels:Seq[String]=Seq()) = {
+  def addDiscreteNode(dim: Int, label:String = "", domainLabels:Seq[String]=Seq()) = {
     val n = new Node(nodes.size, new DiscreteVar(dim, label, domainLabels))
+    nodes += n
+    n
+  }
+
+
+  def addConstantNode(value:Double) = {
+    val n = new Node(nodes.size, new ConstantVar(value))
+    nodes += n
+    n
+  }
+
+
+  /**
+   * Adds a continuous node
+   * @param label description of what the variable represents
+   * @return the added node.
+   */
+  def addContinuousNode(label:String = "") = {
+    val n = new Node(nodes.size, new ContinuousVar(label))
     nodes += n
     n
   }
@@ -108,7 +127,7 @@ final class FactorGraph {
    * @return the added edge.
    */
   def addEdge(f: Factor, n: Node, indexInFactor: Int): Edge = {
-    val e = new Edge(n, f, new DiscreteMsgs(n.variable.asDiscrete.dim))
+    val e = new Edge(n, f, n.variable.createMsgs())
     e.indexInFactor = indexInFactor
     n.edgeCount += 1
     f.edgeCount += 1
@@ -124,12 +143,13 @@ final class FactorGraph {
    * @return the added edge.
    */
   def addExpectationEdge(f: Factor, n: Node, indexInFactor: Int): Edge = {
-    val e = new Edge(n, f, new DiscreteMsgs(n.variable.asDiscrete.dim))
+    val e = new Edge(n, f, n.variable.createMsgs())
     e.indexInFactor = f.edgeCount
     f.edgeCount += 1
     expectationEdges += e
     e
   }
+
 
   /**
    * Adds an edge between node and factor
@@ -387,10 +407,10 @@ object FactorGraph {
      * The potential for this factor. Usually created after edges to factor have been created as
      * the potential directly works with the edges.
      */
-    private var $potential: Potential = null
-    def potential = $potential
+    private var _potential: Potential = null
+    def potential = _potential
     def potential_=(p:Potential) = {
-      $potential = p
+      _potential = p
       p.factor = this
     }
 

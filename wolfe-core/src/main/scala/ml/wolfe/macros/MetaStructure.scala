@@ -88,6 +88,7 @@ trait MetaStructures[C <: Context] extends CodeRepository[C]
      */
     def observed: Boolean = false
 
+    lazy val hasFiniteDomain: Boolean = observed || (children.nonEmpty && children.forall(_.hasFiniteDomain))
   }
 
 
@@ -262,14 +263,17 @@ trait MetaStructures[C <: Context] extends CodeRepository[C]
         }
       case _ =>
         inlineOnce(sampleSpace) match {
-          case Some(inlined) => metaStructure(inlined)
+          case Some(inlined) =>
+            metaStructure(inlined)
           case None => sampleSpace.symbol match {
-            case s if s == wolfeSymbols.doubles || s == wolfeSymbols.strings =>
+            case s if s == wolfeSymbols.strings =>
               new MetaObservedAtomicStructure {def domain = sampleSpace }
             case s if sampleSpace.tpe.typeSymbol == wolfeSymbols.allClass =>
               new MetaObservedAtomicStructure {def domain = sampleSpace }
+            case s if s == wolfeSymbols.doubles =>
+              new MetaContinuousAtomicStructure {def domain = sampleSpace }
             case _ =>
-              new MetaAtomicStructure {def domain = sampleSpace }
+              new MetaDiscreteAtomicStructure {def domain = sampleSpace }
           }
         }
     }

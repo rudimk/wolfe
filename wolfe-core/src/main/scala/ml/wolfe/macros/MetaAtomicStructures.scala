@@ -9,10 +9,10 @@ trait MetaAtomicStructures[C <: Context] {
   import context.universe._
 
   /**
-   * For sample spaces that have no sub-structure.
+   * For discrete sample spaces that have no sub-structure.
    * @author Sebastian Riedel
    */
-  trait MetaAtomicStructure extends MetaStructure {
+  trait MetaDiscreteAtomicStructure extends MetaStructure {
     self =>
 
     def domain: Tree
@@ -25,11 +25,13 @@ trait MetaAtomicStructures[C <: Context] {
     lazy val domainDefs  = List(
       q"val $domName = $domain.toArray",
       q"val $indexName = $domName.zipWithIndex.toMap")
+
+    override lazy val hasFiniteDomain: Boolean = true
     def children = Nil
     override def classDef(graphName: TermName) = q"""
       final class $className (override val astLabel : String = "") extends ml.wolfe.macros.Structure[$argType] {
         ..$domainDefs
-        val node = $graphName.addNode($domName.length, astLabel, $domName.map(_.toString))
+        val node = $graphName.addDiscreteNode($domName.length, astLabel, $domName.map(_.toString))
         val variable = node.variable.asDiscrete
         private def updateValue() {variable.value = variable.domain(variable.setting)}
         def value():$argType = $domName(variable.value)
@@ -59,6 +61,55 @@ trait MetaAtomicStructures[C <: Context] {
                 result: Tree => Option[StructurePointer]): Tree => Option[StructurePointer] = result
 
   }
+
+
+  /**
+   * For continuous sample spaces that have no sub-structure
+   * (probably just doubles... and i guess things like positive-doubles?)
+   * @author luke
+   */
+  trait MetaContinuousAtomicStructure extends MetaStructure {
+    self =>
+
+    def domain: Tree
+
+    lazy val domName   = newTermName(context.fresh("atomDom"))
+    lazy val indexName = newTermName(context.fresh("atomIndex"))
+    lazy val className = newTypeName(context.fresh("AtomicStructure"))
+    lazy val argType   = iterableArgumentType(domain)
+    lazy val domainDefs  = Nil
+    def children = Nil
+    override def classDef(graphName: TermName) = q"""
+      final class $className (override val astLabel : String = "") extends ml.wolfe.macros.Structure[$argType] {
+        val node = $graphName.addContinuousNode(astLabel)
+        val variable = node.variable.asContinuous
+        private def updateValue() {variable.value = variable.setting}
+        def value():$argType = variable.value
+        def children():Iterator[ml.wolfe.macros.Structure[Any]] = Iterator.empty
+        def graph = $graphName
+        def nodes() = Iterator(node)
+        def resetSetting()  = ???
+        def hasNextSetting = ???
+        def nextSetting() = ???
+        def setToArgmax() { /*(Moved to BeliefPropagation) variable.setting = ml.wolfe.MoreArrayOps.maxIndex(variable.b);*/
+                            updateValue()
+                          }
+        final def observe(value:$argType) {
+          variable.setting = value
+        }
+        type Edges = ml.wolfe.FactorGraph.Edge
+        def createEdges(factor: ml.wolfe.FactorGraph.Factor): Edges = {
+          graph.addEdge(factor,node)
+        }
+
+      }
+    """
+
+    def matcher(parent: Tree => Option[StructurePointer],
+                result: Tree => Option[StructurePointer]): Tree => Option[StructurePointer] = result
+
+  }
+
 
   /**
    * For sample spaces that will be fully observed.

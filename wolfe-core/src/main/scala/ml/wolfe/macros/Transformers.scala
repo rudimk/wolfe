@@ -142,7 +142,8 @@ trait Transformers[C<:Context] extends SymbolRepository[C]{
 
     def pushIfFunction(tree: Tree) {
       tree match {
-        case f: Function => functionStack.push(f)
+        case f: Function =>
+          functionStack.push(f)
         case _ =>
       }
     }

@@ -108,8 +108,10 @@ trait MetaGradientCalculators[C <: Context] extends MetaStructures[C]
       conditioner.code
     } else EmptyTree
 
+    val graphName = newTermName("_graph")
+
     val objMatcher = meta.matcher(rootMatcher(objArg.symbol, q"$structName", meta))
-    val factors = metaStructuredFactor(FactorGenerationInfo(objRhs, meta, objMatcher, linearModelInfo = LinearModelInfo(indexTree)))
+    val factors = metaStructuredFactor(FactorGenerationInfo(objRhs, meta, objMatcher, graphName, linearModelInfo = LinearModelInfo(indexTree)))
     val structureDef = meta.classDef(newTermName("_graph"))
     val className = newTypeName(context.fresh("MaxGradientCalculator"))
     val inferCode = inferenceCode(objRhs, newTermName("_graph"))
@@ -119,7 +121,7 @@ trait MetaGradientCalculators[C <: Context] extends MetaStructures[C]
             $structureDef
             val $structName = new ${ meta.className }
             $conditionerCode
-            _graph.setupNodes()
+            $graphName.setupNodes()
             ${ factors.classDef }
             val factors = new ${ factors.className }($structName)
             _graph.build()

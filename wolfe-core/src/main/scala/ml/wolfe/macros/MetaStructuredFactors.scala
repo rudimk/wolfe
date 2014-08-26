@@ -10,7 +10,9 @@ import ml.wolfe.util.CachedPartialFunction
  * @tparam C type of context.
  * @author Sebastian Riedel
  */
-trait MetaStructuredFactors[C <: Context] extends MetaStructures[C] with CodeOptimizer[C] {
+trait MetaStructuredFactors[C <: Context] extends MetaStructures[C]
+                                                  with CodeOptimizer[C]
+                                                  with MetaAtomicStructuredFactors[C] {
 
   import context.universe._
 
@@ -57,6 +59,9 @@ trait MetaStructuredFactors[C <: Context] extends MetaStructures[C] with CodeOpt
     """
     def children = factors
   }
+
+
+
 
   //todo: make tail recursive
   def tupleProcessor(domainIds: List[TermName], tmpIds: List[TermName], body: Tree,
@@ -145,23 +150,23 @@ trait MetaStructuredFactors[C <: Context] extends MetaStructures[C] with CodeOpt
 
   }
 
-  trait MetaAtomicStructuredFactor extends MetaStructuredFactor {
-    val info: FactorGenerationInfo
-    def perSettingArrayName: TermName
-    def perSettingArrayInitializer: Tree
-    def perSettingValue: Tree
+
+  final class MetaGaussianStructuredFactor(info: FactorGenerationInfo, val mean:Tree, val dev:Tree, val x:Tree) extends MetaStructuredFactor {
     def addFactorMethod: TermName = newTermName("addFactor")
     def addEdgeMethod: TermName = newTermName("addEdge")
-    def createPotential: Tree
+    def createPotential: Tree = q"""
+      new ml.wolfe.fg.GaussianPotential(edges(0), 1, edges(1))
+      """
     def children = Nil
     override def weightVector = None
 
     import info._
 
     lazy val transformedPot  = transformer(inlineFull(potential))
-    lazy val className       = newTypeName(context.fresh("AtomicStructuredFactor"))
-    lazy val transformedPointers = distinctByTrees(structures(transformedPot, matcher).filterNot(_.meta.observed))(_.structure)
-    lazy val transformedArgs = transformedPointers.map(_.structure) //distinctTrees(structures(transformedPot, matcher).filterNot(_.meta.observed).map(_.structure))
+    lazy val className       = newTypeName(context.fresh("GaussianStructuredFactor"))
+    //lazy val transformedPointers = distinctByTrees(structures(transformedPot, matcher).filterNot(_.meta.observed))(_.structure)
+    //lazy val transformedArgs = transformedPointers.map(_.structure) //distinctTrees(structures(transformedPot, matcher).filterNot(_.meta.observed).map(_.structure))
+    lazy val transformedArgs = Seq(mean, dev, x).map(t => toSingleNodeStructure(t, info))
     lazy val nodesPerArg     = transformedArgs.map(a => q"$a.nodes()")
     lazy val nodes           = q"""Iterator(..$nodesPerArg).flatMap(identity)"""
     lazy val injected        = context.resetLocalAttrs(injectStructure(transformedPot, matcher))
@@ -169,96 +174,53 @@ trait MetaStructuredFactors[C <: Context] extends MetaStructures[C] with CodeOpt
 
     def inject(term: Tree) = context.resetLocalAttrs(injectStructure(term, matcher))
 
-    lazy val perSetting = q"""
-        //println(vars.map(_.setting).mkString(","))
-        settings(settingIndex) = vars.map(_.setting)
-        $perSettingArrayName(settingIndex) = $perSettingValue
-        settingIndex += 1
-      """
-    lazy val loop       = transformer(loopSettingsNoDuplicates(transformedPointers) { perSetting })
-
-    def shortCode(t:Tree):Tree = t match {
-      case q"ml.wolfe.Wolfe.${x:TermName}" => q"${x.toString}"
-      case q"ml.wolfe.macros.OptimizedOperators.${x:TermName}" => q"${x.toString}"
-      case q"!( $x )" => q""" "!(" + ${shortCode(x)} + ")" """
-      case q"$x.||" => q""" ${shortCode(x)} + " || " """
-      case q"$x.^" => q"""${shortCode(x)} + " ^ " """
-      case q"$x.&&" => q"""${shortCode(x)} + " && " """
-      case q"$x.==" => q"""${shortCode(x)} + " == " """
-      case q"$x.>" => q"""${shortCode(x)} + " > " """
-      case q"$x.<" => q"""${shortCode(x)} + " < " """
-      case q"$x.>=" => q"""${shortCode(x)} + " >= " """
-      case q"$x.<=" => q"""${shortCode(x)} + " <= " """
-      case q"$x.+" => q"""${shortCode(x)} + " + " """
-      case q"$x.-" => q"""${shortCode(x)} + " - " """
-      case q"$x.*" => q"""${shortCode(x)} + " * " """
-      case q"$x./" => q"""${shortCode(x)} + " / " """
-      case q"$x.apply" => shortCode(x)
-      case q"qSumDom1($x)" => t
-      case q"qSumDom2($x)" => t
-      case q"qSumDom3($x)" => t
-      case q"qSumDom4($x)" => t
-      case q"qSumDom5($x)" => t
-      case q"qSumDom6($x)" => t
-      case q"${x:Select}" =>  q"""${shortCode(x.qualifier)} + "." + ${x.name.toString} """
-      case q"${f:Select}($arg)" => q"""${shortCode(f)} + "(" + ${shortCode(arg)} + ")" """
-      case _ => q"${t.toString}"
-    }
-
     lazy val classDef = q"""
       final class $className(..$constructorArgs) extends ml.wolfe.macros.StructuredFactor[${ structure.argType }] {
         import ml.wolfe.FactorGraph._
         val nodes:Array[Node] = $nodes.toList.distinct.sorted.toArray
-        val vars = nodes.map(_.variable.asDiscrete)
-        val dims = vars.map(_.dim)
-        val settingsCount = dims.product
-        val settings = Array.ofDim[Array[Int]](settingsCount)
-        val $perSettingArrayName = $perSettingArrayInitializer
-        var settingIndex = 0
-        $loop
-        val factor = graph.$addFactorMethod(${shortCode(transformedPot)})
+        val vars = nodes.map(_.variable)
+        val factor = graph.$addFactorMethod(${MetaStructuredFactor.shortCode(context)(transformedPot)})
         val edges = nodes.view.zipWithIndex.map(p => graph.$addEdgeMethod(factor,p._1,p._2)).toArray
+        ml.wolfe.util.Util.breakpoint()
         factor.potential = $createPotential
         def factors = Iterator(factor)
         def arguments = List(..$transformedArgs)
       }
     """
   }
-  case class MetaAtomicStructuredFactorTable(info: FactorGenerationInfo)
-  extends MetaAtomicStructuredFactor {
 
+  def toSingleNodeStructure(t:Tree, info:FactorGenerationInfo) : Tree = {
     import info._
+    matcher(t) match {
+      case Some(pointer) => pointer.structure
+      case None => q"""
+        {
+        final class Asdf (override val astLabel : String = "") extends ml.wolfe.macros.Structure[Double] {
+          private var _value:Double = $t
+          private var _hasNext = false
+          def value():Double = _value
+          def children():Iterator[ml.wolfe.macros.Structure[Any]] = Iterator.empty
+          def graph = $graph
+          def nodes():Array[Node] = Array(graph.addConstantNode(1.0))
+          def resetSetting() {_hasNext = true}
+          def hasNextSetting = _hasNext
+          def nextSetting() = {_hasNext = false}
+          def setToArgmax() {}
+          final def observe(value:Double) {
+            _value = value
+          }
+          type Edges = Unit
+          def createEdges(factor: ml.wolfe.FactorGraph.Factor): Edges = {}
 
-    def createPotential = q"new ml.wolfe.fg.TablePotential(edges,ml.wolfe.fg.Table(settings,scores))"
-    def perSettingValue = q"$injected"
-    def perSettingArrayInitializer = q"Array.ofDim[Double](settingsCount)"
-    def perSettingArrayName = newTermName("scores")
+        }
+        new Asdf()
+        }
+        """
+    }
   }
 
-  case class MetaAtomicStructuredFactorLinear(info: FactorGenerationInfo)
-  extends MetaAtomicStructuredFactor {
-
-    import info._
 
 
-    override def addFactorMethod = if (expectations) newTermName("addExpectationFactor") else newTermName("addFactor")
-
-    override def addEdgeMethod = if (expectations) newTermName("addExpectationEdge") else newTermName("addEdge")
-
-    def createPotential = q"new ml.wolfe.fg.LinearPotential(edges,ml.wolfe.fg.Stats(settings,vectors),graph)"
-
-    def perSettingValue = toOptimizedFactorieVector(injected, linearModelInfo.indexTree)
-    //    def perSettingValue = inject(toOptimizedFactorieVector(potential, linearModelInfo.indexTree))
-    def perSettingArrayInitializer = q"Array.ofDim[ml.wolfe.FactorieVector](settingsCount)"
-    def perSettingArrayName = newTermName("vectors")
-  }
-
-  def atomic(info: FactorGenerationInfo) = info.linear match {
-    case true => MetaAtomicStructuredFactorLinear(info)
-    case false => MetaAtomicStructuredFactorTable(info)
-    //    case true => MetaAtomicStructuredFactorLinear(info.copy(potential = info.transformer(inlineFull(info.potential))))
-    //    case false => MetaAtomicStructuredFactorTable(info.copy(potential = info.transformer(inlineFull(info.potential))))
-  }
 
   def tailorMadePotential(info: FactorGenerationInfo, args: List[Tree], annotation: Annotation) = {
     import info._
@@ -364,6 +326,7 @@ trait MetaStructuredFactors[C <: Context] extends MetaStructures[C] with CodeOpt
   case class FactorGenerationInfo(potential: Tree,
                                   structure: MetaStructure,
                                   matcher: Tree => Option[StructurePointer],
+                                  graph:TermName,
                                   constructorArgs: List[ValDef] = Nil,
                                   linearModelInfo: LinearModelInfo,
                                   linear: Boolean = false,
@@ -398,11 +361,13 @@ trait MetaStructuredFactors[C <: Context] extends MetaStructures[C] with CodeOpt
           metaStructuredFactor(info.copy(potential = arg)))
         MetaSumFactor(merged, metaStructs, structure, constructorArgs)
       case Dot(arg1, arg2) if structures(arg1, matcher).isEmpty =>
-        val linearFactor = metaStructuredFactor(FactorGenerationInfo(arg2, structure, matcher, constructorArgs, linearModelInfo, true))
+        val linearFactor = metaStructuredFactor(FactorGenerationInfo(arg2, structure, matcher, graph, constructorArgs, linearModelInfo, true))
         WithWeightVector(linearFactor, arg1)
       case Dot(arg2, arg1) if structures(arg1, matcher).isEmpty =>
-        val linearFactor = metaStructuredFactor(FactorGenerationInfo(arg2, structure, matcher, constructorArgs, linearModelInfo, true))
+        val linearFactor = metaStructuredFactor(FactorGenerationInfo(arg2, structure, matcher, graph, constructorArgs, linearModelInfo, true))
         WithWeightVector(linearFactor, arg1)
+      case q"ml.wolfe.Wolfe.logDist.gaussian($arg1, $arg2)($arg3)" =>
+        new MetaGaussianStructuredFactor(info, arg1, arg2, arg3)
       case _ => inlineOnce(potential) match {
         case Some(inlined) =>
           metaStructuredFactor(info.copy(potential = inlined))
@@ -418,7 +383,7 @@ trait MetaStructuredFactors[C <: Context] extends MetaStructures[C] with CodeOpt
     val meta = metaStructure(sampleSpace)
     val root = rootMatcher(arg.symbol, q"$structName", meta)
     val matcher = meta.matcher(root)
-    val metaFactor = metaStructuredFactor(FactorGenerationInfo(rhs, meta, matcher, linearModelInfo = LinearModelInfo(q"_index")))
+    val metaFactor = metaStructuredFactor(FactorGenerationInfo(rhs, meta, matcher, graphName, linearModelInfo = LinearModelInfo(q"_index")))
     val factorieWeights = metaFactor.weightVector.map(
       w => q"ml.wolfe.FactorieConverter.toFactorieDenseVector($w,_index)"
     ).getOrElse(q"new ml.wolfe.DenseVector(0)")
@@ -485,4 +450,35 @@ object MetaStructuredFactor {
   }
 
 
+  def shortCode(c:Context)(t:c.Tree):c.Tree = {
+    import c.universe._
+
+    t match {
+      case q"ml.wolfe.Wolfe.${x:TermName}" => q"${x.toString}"
+      case q"ml.wolfe.macros.OptimizedOperators.${x:TermName}" => q"${x.toString}"
+      case q"!( $x )" => q""" "!(" + ${shortCode(c)(x)} + ")" """
+      case q"$x.||" => q""" ${shortCode(c)(x)} + " || " """
+      case q"$x.^" => q"""${shortCode(c)(x)} + " ^ " """
+      case q"$x.&&" => q"""${shortCode(c)(x)} + " && " """
+      case q"$x.==" => q"""${shortCode(c)(x)} + " == " """
+      case q"$x.>" => q"""${shortCode(c)(x)} + " > " """
+      case q"$x.<" => q"""${shortCode(c)(x)} + " < " """
+      case q"$x.>=" => q"""${shortCode(c)(x)} + " >= " """
+      case q"$x.<=" => q"""${shortCode(c)(x)} + " <= " """
+      case q"$x.+" => q"""${shortCode(c)(x)} + " + " """
+      case q"$x.-" => q"""${shortCode(c)(x)} + " - " """
+      case q"$x.*" => q"""${shortCode(c)(x)} + " * " """
+      case q"$x./" => q"""${shortCode(c)(x)} + " / " """
+      case q"$x.apply" => shortCode(c)(x)
+      case q"qSumDom1($x)" => t
+      case q"qSumDom2($x)" => t
+      case q"qSumDom3($x)" => t
+      case q"qSumDom4($x)" => t
+      case q"qSumDom5($x)" => t
+      case q"qSumDom6($x)" => t
+      case q"${x:Select}" =>  q"""${shortCode(c)(x.qualifier)} + "." + ${x.name.toString} """
+      case q"${f:Select}($arg)" => q"""${shortCode(c)(f)} + "(" + ${shortCode(c)(arg)} + ")" """
+      case _ => q"${t.toString}"
+    }
+  }
 }

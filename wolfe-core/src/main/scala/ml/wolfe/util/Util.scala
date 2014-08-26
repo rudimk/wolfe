@@ -26,6 +26,10 @@ object Util {
     }
   }
 
+  def breakpoint() = {
+    println() //Set a breakpoint here to debug macros
+  }
+
   /**
    * Recursively descend directory, returning a list of files.
    */

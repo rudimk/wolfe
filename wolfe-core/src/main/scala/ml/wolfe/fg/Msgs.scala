@@ -26,6 +26,11 @@ final class DiscreteMsgs(val dim: Int) extends Msgs {
   }
 }
 
+final class ContinuousMsgs() extends Msgs {
+  override def saveCurrentF2NAsOld(): Unit = ???
+}
+
+
 /**
  *
  * @param n2fComponents The components of the n2f message

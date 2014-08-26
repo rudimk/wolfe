@@ -256,7 +256,7 @@ trait OptimizedOperators[C <: Context] extends MetaStructures[C]
 
     //This method returns meta information about the class of factors that correspond to the given objective.
     //this meta information can be used to define the class of factors, and to create instances of it.
-    val factors = metaStructuredFactor(FactorGenerationInfo(objRhs, meta, objMatcher, linearModelInfo = LinearModelInfo(q"_index")))
+    val factors = metaStructuredFactor(FactorGenerationInfo(objRhs, meta, objMatcher, graphName, linearModelInfo = LinearModelInfo(q"_index")))
 
     //based on possible annotation on the objective, determine which inference code should be used.
     val inferCode = inferenceCode(rawObjRhs, graphName)
@@ -271,7 +271,7 @@ trait OptimizedOperators[C <: Context] extends MetaStructures[C]
     else {
       val Function(List(statsArg), statsRhs) = blockToFunction(unwrapSingletonBlocks(stats))
       val statsMatcher = meta.matcher(rootMatcher(statsArg.symbol, q"$structName", meta))
-      metaStructuredFactor(FactorGenerationInfo(statsRhs, meta, statsMatcher,
+      metaStructuredFactor(FactorGenerationInfo(statsRhs, meta, statsMatcher, graphName,
         linearModelInfo = LinearModelInfo(q"_index"), linear = true, expectations = true))
     }
 

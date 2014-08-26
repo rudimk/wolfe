@@ -18,6 +18,8 @@ class TupleVar(val componentNodes:Array[Node]) extends Var[Seq[(DiscreteVar, Int
   val components = componentNodes.map(_.variable.asDiscrete)
   val dim = components.map(_.dim).product
 
+  override def createMsgs() = ??? //need to know shared variables, but potential is created AFTER edge...
+
   override val label = componentNodes.map(_.variable.label).mkString(",")
   val domainLabels = cartesianProduct(components.map(_.domainLabels)).map(_.mkString("(", ", ", ")"))
 

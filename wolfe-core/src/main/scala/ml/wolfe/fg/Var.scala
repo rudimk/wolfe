@@ -19,7 +19,9 @@ trait Var[T] {
   def asDiscrete = this.asInstanceOf[DiscreteVar]
   def asVector = this.asInstanceOf[VectorVar]
   def asTuple = this.asInstanceOf[TupleVar]
+  def asContinuous = this.asInstanceOf[ContinuousVar]
   def setup(){}
+  def createMsgs():Msgs
   def initializeToNegInfinity():Unit = notSupported
   def initializeRandomly(eps:Double):Unit = notSupported
   def updateN2F(edge: Edge):Unit = notSupported
@@ -55,6 +57,10 @@ trait Var[T] {
   var node:Node = null //updated in node init
 }
 
+final class ConstantVar(var setting:Double) extends Var[Double] {
+  override def createMsgs(): Msgs = ???
+}
+
 final class DiscreteVar(var dim: Int, override val label:String = "", val domainLabels:Seq[String] = Seq()) extends Var[Int] {
   /* node belief */
   var b = Array.ofDim[Double](dim)
@@ -78,6 +84,8 @@ final class DiscreteVar(var dim: Int, override val label:String = "", val domain
     }
     result
   }
+
+  override def createMsgs() = new DiscreteMsgs(dim)
 
   override def initializeToNegInfinity() = {
     fill(b, Double.NegativeInfinity)
@@ -170,6 +178,12 @@ final class DiscreteVar(var dim: Int, override val label:String = "", val domain
 final class ContinuousVar(override val label:String = "") extends Var[Double] {
   /* indicates that variable is in a certain state */
   override var setting: Double = 0
+
+  override def createMsgs() = null
+
+  /* indicates the value corresponding to the setting of the node */
+  var value: Double = 0 //todo: waitwait, what's this for again?
+
   override def sampleUniform(): Unit = setting = 42
 }
 
@@ -177,6 +191,7 @@ final class VectorVar(val dim:Int) extends Var[FactorieVector] {
   var b:FactorieVector = new DenseTensor1(dim)
   override var setting:FactorieVector = null
 
+  override def createMsgs() = null
 
   override def updateN2F(edge: Edge) = {
     edge.msgs.asVector.n2f = b //todo: copy instead?
