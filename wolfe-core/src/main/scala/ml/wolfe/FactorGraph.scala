@@ -203,6 +203,22 @@ final class FactorGraph {
     f
   }
 
+  def addLinearPotential(n1: Node, n2: Node, stats: Stats) = {
+    val f1 = addFactor()
+    val e1 = addEdge(f1, n1)
+    val e2 = addEdge(f1, n2)
+    f1.potential = new LinearPotential(Array(e1, e2), stats, this)
+    f1
+  }
+
+  def addLinearPotential(n1: Node, stats: Stats) = {
+    val f1 = addFactor()
+    val e1 = addEdge(f1, n1)
+    f1.potential = new LinearPotential(Array(e1), stats, this)
+    f1
+  }
+
+
   /**
    * Creates a new factor, no potential assigned.
    * @return the created factor.
