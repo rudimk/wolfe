@@ -3,19 +3,78 @@ package ml.wolfe.apps.boltzmann
 import cc.factorie.la.{DenseTensor1, SparseBinaryTensor1, SingletonBinaryTensor1}
 import ml.wolfe.{MoreArrayOps, BeliefPropagation, FactorGraph}
 import ml.wolfe.FactorGraph.Edge
-import ml.wolfe.fg.{Stats, DiscreteMsgs}
+import ml.wolfe.fg.{VectorMsgs, Potential, Stats, DiscreteMsgs}
 
 /**
  * @author Georgios Spithourakis
  */
 object demoRBM extends App {
-  val H = 5
-  val V = 10
+
+  val H = 2
+  val V = 2
+
+  val paramDim = V + H + H * V
+
+  val likelihoodFG = new FactorGraph
+
+  val weights = likelihoodFG.addVectorNode(paramDim, "weights")
+
+  val data = Seq(Seq(1, 0), Seq(0, 1))
+
+  val factors = for (d <- data) yield {
+    likelihoodFG.buildFactor(Seq(weights))(_.map(_ => new VectorMsgs)) { edges => {
+      new BoltzmannLoss(edges(0), d, new RestrictedBoltzmannMachine(H, V))
+    }
+    }
+  }
+
+  likelihoodFG.build()
+
+  //println(fg.gradient)
+
+}
+
+class BoltzmannLoss(weightsEdge: Edge, observation: Seq[Int], rbm: RestrictedBoltzmannMachine) extends Potential {
+
+
+  override def valueAndGradientForAllEdges() = {
+
+    val weights = weightsEdge.msgs.asVector.n2f
+
+    //calculate expectations with visibles fixed
+    //calculate expectations with visibles unobserved
+
+    //    weights(visibleBiasParam(0)) = 10.0
+    //    weights(hiddenBiasParam(0)) = -10.0
+    //    weights(pairParam(0, 0)) = 10.0
+
+    rbm.fg.weights = weights
+
+    //GibbsSampling.sample(fg)
+    //CD.sampleAndStartFrom(data)
+    BeliefPropagation.sumProduct(10)(rbm.fg)
+
+    for (h <- rbm.hNodes) {
+      println(s"${ h.variable.label }: ${ rbm.toProb(h.variable.asDiscrete.b).mkString(" ") }")
+    }
+    for (v <- rbm.vNodes) {
+      println(s"${ v.variable.label }: ${ rbm.toProb(v.variable.asDiscrete.b).mkString(" ") }")
+    }
+
+    println(rbm.fg.gradient)
+
+    weightsEdge.msgs.asVector.f2n = rbm.fg.gradient
+
+    rbm.fg.value
+  }
+
+}
+
+class RestrictedBoltzmannMachine(val H: Int, val V: Int) {
 
   val paramDim = V + H + H * V
 
   val zeroVector = new SparseBinaryTensor1(paramDim)
-
 
   val fg     = new FactorGraph
   val vNodes = for (i <- 0 until V) yield fg.addDiscreteNode(2, "v" + i)
@@ -25,12 +84,11 @@ object demoRBM extends App {
   def hiddenBiasParam(j: Int) = V + j
   def pairParam(v_i: Int, h_j: Int) = V + H + H * v_i + h_j
 
-  def toProb(array:Array[Double]) = {
+  def toProb(array: Array[Double]) = {
     val copy = MoreArrayOps.copy(array)
     MoreArrayOps.expNormalize(copy)
     copy
   }
-
 
   val vUnary = for (i <- 0 until V) yield fg.addLinearPotential(vNodes(i), Stats(
     Array(Array(0), Array(1)),
@@ -46,29 +104,4 @@ object demoRBM extends App {
 
   //create internal structures necessary for inference
   fg.build()
-
-  val weights = new DenseTensor1(paramDim)
-  weights(visibleBiasParam(0)) = 10.0
-  weights(hiddenBiasParam(0)) = -10.0
-  weights(pairParam(0, 0)) = 10.0
-
-  fg.weights = weights
-
-  //GibbsSampling.sample(fg)
-  //CD.sampleAndStartFrom(data)
-  BeliefPropagation.sumProduct(10)(fg)
-
-  for (h <- hNodes) {
-    println(s"${h.variable.label}: ${toProb(h.variable.asDiscrete.b).mkString(" ")}")
-  }
-  for (v <- vNodes) {
-    println(s"${v.variable.label}: ${toProb(v.variable.asDiscrete.b).mkString(" ")}")
-  }
-
-  println(fg.gradient)
-  //println(fg.gradient)
-
-
-
-
 }
