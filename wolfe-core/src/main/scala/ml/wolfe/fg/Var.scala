@@ -28,6 +28,7 @@ trait Var[T] {
   protected var observed: Option[T] = None
   def isObserved = observed != None
   def observe(value:T) = observed = Some(value)
+  def unobserve() {observed = None}
 
   def initializeToNegInfinity():Unit = notSupported
   def initializeRandomly(eps:Double):Unit = notSupported

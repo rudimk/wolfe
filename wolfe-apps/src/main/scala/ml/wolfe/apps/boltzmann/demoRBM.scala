@@ -30,44 +30,54 @@ object demoRBM extends App {
 
   likelihoodFG.build()
 
-  GradientBasedOptimizer(likelihoodFG,new OnlineTrainer(_, new AdaGrad(),10))
+  GradientBasedOptimizer(likelihoodFG, new OnlineTrainer(_, new AdaGrad(), 10))
 
   //println(fg.gradient)
 
 }
 
-class BoltzmannLoss(weightsEdge: Edge, observation: Seq[Int], rbm: RestrictedBoltzmannMachine) extends Potential {
+class BoltzmannLoss(weightsEdge: Edge, observation: IndexedSeq[Int], rbm: RestrictedBoltzmannMachine) extends Potential {
 
+
+
+
+  //    weights(visibleBiasParam(0)) = 10.0
+  //    weights(hiddenBiasParam(0)) = -10.0
+  //    weights(pairParam(0, 0)) = 10.0
 
   override def valueAndGradientForAllEdges() = {
 
     val weights = weightsEdge.msgs.asVector.n2f
-
-    //calculate expectations with visibles fixed
-    //calculate expectations with visibles unobserved
-
-    //    weights(visibleBiasParam(0)) = 10.0
-    //    weights(hiddenBiasParam(0)) = -10.0
-    //    weights(pairParam(0, 0)) = 10.0
-
     rbm.fg.weights = weights
 
-    //GibbsSampling.sample(fg)
-    //CD.sampleAndStartFrom(data)
+    val gradient = new DenseTensor1(weights.size)
+    var value = 0.0
+
+    //calculate expectations with visibles fixed (positive gradient)
+    for (i <- observation.indices) rbm.vNodes(i).variable.asDiscreteTyped[Int].observe(observation(i))
+
+    //calculate expectations with visibles unobserved (negative gradient)
+    BeliefPropagation.sumProduct(2)(rbm.fg)
+
+    //add the positive gradient
+    gradient += rbm.fg.gradient
+    value += rbm.fg.value
+
+    //unobserve to calculate the negative gradient
+    for (n <- rbm.vNodes) n.variable.asDiscreteTyped[Int].unobserve()
+
+    //do inference in full model without observations
     BeliefPropagation.sumProduct(10)(rbm.fg)
 
-    for (h <- rbm.hNodes) {
-      println(s"${ h.variable.label }: ${ rbm.toProb(h.variable.asDiscrete.b).mkString(" ") }")
-    }
-    for (v <- rbm.vNodes) {
-      println(s"${ v.variable.label }: ${ rbm.toProb(v.variable.asDiscrete.b).mkString(" ") }")
-    }
+    //subtract the negative positive gradient
+    gradient += rbm.fg.gradient
+    value -= rbm.fg.value
 
-    println(rbm.fg.gradient)
+    //pass the result to the node
+    weightsEdge.msgs.asVector.f2n = gradient
 
-    weightsEdge.msgs.asVector.f2n = rbm.fg.gradient
-
-    rbm.fg.value
+    //return
+    value
   }
 
 }
@@ -106,4 +116,20 @@ class RestrictedBoltzmannMachine(val H: Int, val V: Int) {
 
   //create internal structures necessary for inference
   fg.build()
+
+
+  //GibbsSampling.sample(fg)
+  //CD.sampleAndStartFrom(data)
+//
+//  for (h <- rbm.hNodes) {
+//    println(s"${ h.variable.label }: ${ rbm.toProb(h.variable.asDiscrete.b).mkString(" ") }")
+//  }
+//  for (v <- rbm.vNodes) {
+//    println(s"${ v.variable.label }: ${ rbm.toProb(v.variable.asDiscrete.b).mkString(" ") }")
+//  }
+//
+//  println(rbm.fg.gradient)
+//
+//  weightsEdge.msgs.asVector.f2n = rbm.fg.gradient
+
 }
