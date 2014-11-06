@@ -1,7 +1,8 @@
 package ml.wolfe.apps.boltzmann
 
 import cc.factorie.la.{DenseTensor1, SparseBinaryTensor1, SingletonBinaryTensor1}
-import ml.wolfe.{MoreArrayOps, BeliefPropagation, FactorGraph}
+import cc.factorie.optimize.{OnlineTrainer, AdaGrad}
+import ml.wolfe.{GradientBasedOptimizer, MoreArrayOps, BeliefPropagation, FactorGraph}
 import ml.wolfe.FactorGraph.Edge
 import ml.wolfe.fg.{VectorMsgs, Potential, Stats, DiscreteMsgs}
 
@@ -22,13 +23,14 @@ object demoRBM extends App {
   val data = Seq(Seq(1, 0), Seq(0, 1))
 
   val factors = for (d <- data) yield {
-    likelihoodFG.buildFactor(Seq(weights))(_.map(_ => new VectorMsgs)) { edges => {
+    likelihoodFG.buildFactor(Seq(weights))(_.map(_ => new VectorMsgs)) { edges =>
       new BoltzmannLoss(edges(0), d, new RestrictedBoltzmannMachine(H, V))
-    }
     }
   }
 
   likelihoodFG.build()
+
+  GradientBasedOptimizer(likelihoodFG,new OnlineTrainer(_, new AdaGrad(),10))
 
   //println(fg.gradient)
 
