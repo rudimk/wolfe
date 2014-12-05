@@ -166,7 +166,7 @@ object Build extends Build {
     id = "wolfe",
     base = file("."),
     settings = Project.defaultSettings ++ publishSettings ++ generalSettings ++ releaseSettings
-  ) aggregate(core, nlp, examples, apps, ui, neural, util)
+  ) dependsOn (core, nlp, examples, apps, ui, neural, util)
 
   lazy val core = Project(
     id = "wolfe-core",
