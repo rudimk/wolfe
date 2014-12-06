@@ -39,7 +39,9 @@ class IntermediateLayerSpecs extends WolfeSpec {
     }
 
     "support a perceptron loss" ignore {
-      //def model(weights:Vector,
+      //def model(weights:Vector,x:X)(y:Y) = ...
+      //def loss(weights:Vector)(x:X,y:Y) = max(labels)(model(weights,x)) - model(weights,x)(y)
+      //
       //given an instance model, calculate its argmax and return statistics of winning settings for exp fam potentials
       //inner potential needs a stats(incoming,result) method
       //this is used to calculate gradients

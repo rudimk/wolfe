@@ -224,7 +224,7 @@ object Argmax {
    * @return the result of an argmax.
    */
   def apply[T](space: SearchSpace[T], observation: State = State.empty)(pot: SupportsArgmax): T = {
-    val argmaxer = pot.argmaxer
+    val argmaxer = pot.argmaxer()
     val result = pot.createSetting()
     val scoreBuffer = new DoubleBuffer()
     argmaxer.argmax(pot.toPartialSetting(observation),pot.createMsgs(),result,scoreBuffer)
@@ -238,7 +238,8 @@ object Argmax {
  * @param args the arguments of the sum.
  * @tparam P the type of argument potentials.
  */
-class FlatSum[P <: Potential](val args: Seq[P]) extends Potential {
+trait Sum[P<:Potential] extends Potential {
+  def args:Seq[P]
   lazy val discVars = args.flatMap(_.discVars).distinct.toArray//distinct does not work with iterators
   lazy val contVars = args.flatMap(_.contVars).distinct.toArray
   lazy val vectVars = args.flatMap(_.vectVars).distinct.toArray
@@ -253,7 +254,6 @@ class FlatSum[P <: Potential](val args: Seq[P]) extends Potential {
     a.discVars.map(discVar2Index),
     a.contVars.map(contVar2Index),
     a.vectVars.map(vectVar2Index)))
-
 
   def scorer() = new Scorer {
 
@@ -271,9 +271,13 @@ class FlatSum[P <: Potential](val args: Seq[P]) extends Potential {
       scores.sum
     }
   }
+
 }
 
-class DifferentiableFlatSum[P <: StatelessDifferentiable](args:Seq[P]) extends FlatSum(args) with StatelessDifferentiable{ //rather define it as GradientCalculator ?
+
+class FlatSum[P <: Potential](val args: Seq[P]) extends Sum[P]
+
+trait DifferentiableFlatSum[P <: StatelessDifferentiable] extends Sum[P] with StatelessDifferentiable{ //rather define it as GradientCalculator ?
   def gradientAndValue(currentParameters: Setting, gradient: Setting): Double = {
     val totalUpdate = new Setting(discVars.length,contVars.length, vectVars.length)
     val scores = for ((arg, map) <- args zip argMaps) yield { //could not get it to work with iterators (?)
