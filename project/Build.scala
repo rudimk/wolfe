@@ -50,6 +50,7 @@ object BuildSettings {
   )
 
   val globalDependencies = libraryDependencies ++= Seq(
+    "org.scalautils" % "scalautils_2.10" % "2.0",
     "org.scalatest" %% "scalatest" % "2.2.1" % "test->compile;compile->compile",
     "com.typesafe" % "config" % "1.2.1",
     "com.github.axel22" %% "scalameter" % "0.4",
@@ -158,7 +159,7 @@ object Build extends Build {
 
   import BuildSettings._
 
-  lazy val jamr = ProjectRef(uri("git://github.com/jflanigan/jamr.git"), "jamr")
+  //lazy val jamr = ProjectRef(uri("git://github.com/jflanigan/jamr.git"), "jamr")
   lazy val berkNER = ProjectRef(uri("git://github.com/gregdurrett/berkeley-entity.git"), "berkeley-entity")
 
   lazy val root = Project(
